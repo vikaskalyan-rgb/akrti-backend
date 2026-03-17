@@ -35,16 +35,14 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                // Public endpoints
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/ws/**").permitAll()
-                // Admin only
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/expenses/**").hasRole("ADMIN")
-                // Authenticated users
-                .anyRequest().authenticated()
-            )
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/expenses").hasAnyRole("ADMIN", "OWNER")
+                        .requestMatchers("/api/expenses/**").hasAnyRole("ADMIN", "OWNER")
+                        .anyRequest().authenticated()
+                )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

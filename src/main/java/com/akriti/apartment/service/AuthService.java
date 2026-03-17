@@ -45,11 +45,13 @@ public class AuthService {
     public MessageResponse sendOtp(SendOtpRequest req) {
         String phone = req.getPhone().trim();
 
-        // Validate phone exists in flats
-        boolean isOwner   = flatRepository.findByOwnerPhone(phone).isPresent();
-        boolean isTenant  = flatRepository.findByResidentPhone(phone).isPresent();
+        // Check if admin, owner or tenant
+        boolean isAdmin  = userRepository.findByPhone(phone)
+                .map(u -> u.getRole() == User.Role.ADMIN).orElse(false);
+        boolean isOwner  = flatRepository.findByOwnerPhone(phone).isPresent();
+        boolean isTenant = flatRepository.findByResidentPhone(phone).isPresent();
 
-        if (!isOwner && !isTenant) {
+        if (!isAdmin && !isOwner && !isTenant) {
             throw new RuntimeException("Phone number not registered in our system");
         }
 
@@ -57,22 +59,17 @@ public class AuthService {
         String otp = String.format("%06d", new Random().nextInt(999999));
         log.info("OTP for +91{}: {}", phone, otp); // Always log for dev
 
-        // Save OTP to user (create if not exists)
         User user = userRepository.findByPhone(phone).orElseGet(() -> {
-            // Determine name and role from flat
-            String name = "Resident";
+            String name   = "Resident";
             User.Role role = User.Role.OWNER;
-            String flatNo = null;
+            String flatNo  = null;
 
             Optional<Flat> ownerFlat = flatRepository.findByOwnerPhone(phone);
             if (ownerFlat.isPresent()) {
                 Flat f = ownerFlat.get();
                 name   = f.getOwnerName();
                 flatNo = f.getFlatNo();
-                role   = f.getOwnerType() == Flat.OwnerType.RENTED
-                    && f.getResidentPhone() != null
-                    && !f.getResidentPhone().equals(phone)
-                        ? User.Role.OWNER : User.Role.OWNER;
+                role   = User.Role.OWNER;
             } else {
                 Optional<Flat> tenantFlat = flatRepository.findByResidentPhone(phone);
                 if (tenantFlat.isPresent()) {
@@ -82,9 +79,8 @@ public class AuthService {
                     role   = User.Role.TENANT;
                 }
             }
-
             return User.builder()
-                .phone(phone).name(name).role(role).flatNo(flatNo).build();
+                    .phone(phone).name(name).role(role).flatNo(flatNo).build();
         });
 
         user.setOtpCode(otp);

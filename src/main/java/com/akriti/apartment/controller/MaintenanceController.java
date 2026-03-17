@@ -43,7 +43,7 @@ public class MaintenanceController {
         return ResponseEntity.ok(maintenanceService.getFlatPayments(flatNo));
     }
 
-    // ── Mark payment as paid (resident only) ──────────────
+    // ── Mark payment as paid (resident + admin-residents) ─────────
     @PostMapping("/flat/{flatNo}/pay")
     public ResponseEntity<?> markPaid(
             @PathVariable String flatNo,
@@ -53,11 +53,25 @@ public class MaintenanceController {
             Authentication auth) {
         try {
             String callerPhone = auth.getName();
-            return ResponseEntity.ok(
-                maintenanceService.markPaid(flatNo, month, year, req, callerPhone));
+            String callerRole  = auth.getAuthorities().stream()
+                    .findFirst()
+                    .map(a -> a.getAuthority())
+                    .orElse("");
+
+            // Admins can mark payment for their own flat directly
+            // Residents can only mark their own flat
+            if (!callerRole.equals("ROLE_ADMIN")) {
+                // For residents, verify they are the payer
+                return ResponseEntity.ok(
+                        maintenanceService.markPaid(flatNo, month, year, req, callerPhone));
+            } else {
+                // Admin — allow directly, no phone check
+                return ResponseEntity.ok(
+                        maintenanceService.markPaidByAdmin(flatNo, month, year, req));
+            }
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
+                    .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
         }
     }
 

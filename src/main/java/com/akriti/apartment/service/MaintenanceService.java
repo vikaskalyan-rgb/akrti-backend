@@ -39,6 +39,35 @@ public class MaintenanceService {
             .orElseThrow(() -> new RuntimeException("Payment record not found"));
     }
 
+    // ── Mark as paid by admin (for their own flat, no phone check) ──
+    @Transactional
+    public MaintenancePayment markPaidByAdmin(String flatNo, int month, int year,
+                                              MarkPaymentRequest req) {
+        MaintenancePayment payment = paymentRepository
+                .findByFlatNoAndMonthAndYear(flatNo, month, year)
+                .orElseThrow(() -> new RuntimeException("Payment record not found"));
+
+        if (payment.getStatus() == MaintenancePayment.PaymentStatus.PAID) {
+            throw new RuntimeException("Payment already marked as paid");
+        }
+
+        MaintenancePayment.PaymentMode mode = MaintenancePayment.PaymentMode.valueOf(
+                req.getPaymentMode().toUpperCase().replace(" ", "_")
+        );
+
+        payment.setStatus(MaintenancePayment.PaymentStatus.PAID);
+        payment.setAmount(monthlyAmount);
+        payment.setPaidOn(LocalDate.now());
+        payment.setPaymentMode(mode);
+        payment.setTransactionRef(req.getTransactionRef());
+        payment.setMarkedByResident(true);
+        payment.setUpdatedAt(LocalDateTime.now());
+
+        MaintenancePayment saved = paymentRepository.save(payment);
+        wsPublisher.paymentUpdated(flatNo, month, year);
+        return saved;
+    }
+
     // ── Mark as paid (resident action) ────────────────────
     @Transactional
     public MaintenancePayment markPaid(String flatNo, int month, int year,
