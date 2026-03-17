@@ -23,7 +23,7 @@ public class AuthService {
     @Autowired private UserRepository userRepository;
     @Autowired private FlatRepository flatRepository;
     @Autowired private JwtUtil jwtUtil;
-    @Autowired private WhatsAppService whatsAppService;
+    @Autowired private OtpService otpService;
 
     @Value("${app.admin.username}") private String adminUsername;
     @Value("${app.admin.password}") private String adminPassword;
@@ -87,11 +87,11 @@ public class AuthService {
         user.setOtpExpiresAt(LocalDateTime.now().plusMinutes(10));
         userRepository.save(user);
 
-        // Send via WhatsApp
-        whatsAppService.sendOtp(phone, otp);
+        // Send via sms
+        otpService.sendOtp(phone, otp);
 
         return MessageResponse.builder()
-            .message("OTP sent to WhatsApp +91" + phone)
+            .message("OTP sent to sms +91" + phone)
             .success(true)
             .build();
     }
