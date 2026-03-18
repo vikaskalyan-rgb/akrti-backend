@@ -1,32 +1,41 @@
 package com.akriti.apartment.service;
 
-import com.resend.*;
-import com.resend.services.emails.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import jakarta.mail.internet.MimeMessage;
+import lombok.RequiredArgsConstructor;
 
 @Service
+@RequiredArgsConstructor
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+    private final JavaMailSender mailSender;
 
-    @Value("${resend.api.key:}")
-    private String apiKey;
+    @Value("${spring.mail.username:}")
+    private String fromEmail;
 
     public void sendOtpEmail(String toEmail, String otp, String flatNo) {
-        if (apiKey == null || apiKey.isBlank()) {
-            log.info("📧 [SIMULATED EMAIL] To: {} | OTP: {}", toEmail, otp);
+        if (fromEmail == null || fromEmail.isBlank()) {
+            log.info("📧 [SIMULATED EMAIL] To: {} | Flat: {} | OTP: {}", toEmail, flatNo, otp);
             return;
         }
         try {
-            Resend resend = new Resend(apiKey);
+            MimeMessage message = mailSender.createMimeMessage();;
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail, "Akriti Adeshwar Society");
+            helper.setTo(toEmail);
+            helper.setSubject("Akriti Adeshwar — Password Reset OTP");
 
             String html = """
                 <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
                   <div style="background:#5b52f0;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
-                    <h2 style="color:white;margin:0;">Akriti Adeshwar</h2>
+                    <h2 style="color:white;margin:0;font-size:20px;">Akriti Adeshwar</h2>
                     <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:13px;">
                       Society Management Portal
                     </p>
@@ -51,15 +60,9 @@ public class EmailService {
                 </div>
                 """.formatted(flatNo, otp);
 
-            CreateEmailOptions params = CreateEmailOptions.builder()
-                    .from("Akriti Adeshwar <onboarding@resend.dev>")
-                    .to(toEmail)
-                    .subject("Akriti Adeshwar — Password Reset OTP")
-                    .html(html)
-                    .build();
-
-            CreateEmailResponse response = resend.emails().send(params);
-            log.info("✅ Email sent via Resend: {}", response.getId());
+            helper.setText(html, true);
+            mailSender.send(message);
+            log.info("✅ OTP email sent to {}", toEmail);
 
         } catch (Exception e) {
             log.error("Failed to send email: {}", e.getMessage());
