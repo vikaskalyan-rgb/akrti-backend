@@ -139,18 +139,19 @@ public class AuthService {
 
     // ── Flat + Password Login ──────────────────────────────────────
     public AuthResponse loginWithPassword(LoginRequest req) {
-        // Find user by flatNo
-        List<User> users = userRepository.findByFlatNo(req.getFlatNo());
-        if (users.isEmpty()) throw new RuntimeException("Flat number not registered");
-        User user = users.get(0);
+        String identifier = req.getIdentifier().trim().toUpperCase()
+                .replace("_TENANT", "_tenant"); // normalize
 
-        // Check password
+        User user = userRepository.findByIdentifier(req.getIdentifier().trim())
+                .orElseThrow(() -> new RuntimeException(
+                        "Identifier not registered. Use flat number (e.g. 2H) or flat_tenant (e.g. 4B_tenant)"));
+
         if (!passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
             throw new RuntimeException("Invalid password");
         }
 
         String token = jwtUtil.generateToken(
-                user.getPhone() != null ? user.getPhone() : user.getFlatNo(),
+                user.getPhone() != null ? user.getPhone() : user.getIdentifier(),
                 user.getRole().name(),
                 user.getFlatNo(),
                 user.getName()
@@ -166,14 +167,13 @@ public class AuthService {
                 .build();
     }
 
-    // ── Forgot Password — send OTP to email ───────────────────────
+    // ── Forgot Password ────────────────────────────────────────────
     public void forgotPassword(ForgotPasswordRequest req) {
-        List<User> users = userRepository.findByFlatNo(req.getFlatNo());
-        if (users.isEmpty()) throw new RuntimeException("Flat number not registered");
-        User user = users.get(0);
+        User user = userRepository.findByIdentifier(req.getIdentifier().trim())
+                .orElseThrow(() -> new RuntimeException("Identifier not registered"));
 
         if (user.getEmail() == null || !user.getEmail().equalsIgnoreCase(req.getEmail())) {
-            throw new RuntimeException("Email does not match our records for this flat");
+            throw new RuntimeException("Email does not match our records");
         }
 
         String otp = String.format("%06d", new java.util.Random().nextInt(999999));
@@ -181,14 +181,13 @@ public class AuthService {
         user.setPasswordResetOtpExpiry(LocalDateTime.now().plusMinutes(10));
         userRepository.save(user);
 
-        emailService.sendOtpEmail(req.getEmail(), otp, req.getFlatNo());
+        emailService.sendOtpEmail(req.getEmail(), otp, user.getFlatNo());
     }
 
     // ── Reset Password ─────────────────────────────────────────────
     public void resetPassword(ResetPasswordRequest req) {
-        List<User> users = userRepository.findByFlatNo(req.getFlatNo());
-        if (users.isEmpty()) throw new RuntimeException("Flat number not registered");
-        User user = users.get(0);
+        User user = userRepository.findByIdentifier(req.getIdentifier().trim())
+                .orElseThrow(() -> new RuntimeException("Identifier not registered"));
 
         if (user.getPasswordResetOtp() == null
                 || !user.getPasswordResetOtp().equals(req.getOtp())) {
@@ -205,4 +204,5 @@ public class AuthService {
         user.setFirstLogin(false);
         userRepository.save(user);
     }
+
 }

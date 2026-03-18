@@ -4,6 +4,6 @@ import lombok.Data;
 
 @Data
 public class LoginRequest {
-    private String flatNo;
+    private String identifier; // 4B, 4B_tenant, SUP
     private String password;
 }

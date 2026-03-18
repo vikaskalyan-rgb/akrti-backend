@@ -39,70 +39,95 @@ public class DataSeeder implements CommandLineRunner {
 
     private void seedUserPasswords() {
         log.info("🔐 Seeding user passwords...");
-
         List<Flat> flats = flatRepository.findAll();
         int created = 0, updated = 0;
 
         for (Flat flat : flats) {
-            if (flat.getFloor() == 0) continue; // skip ground floor
-            // Skip truly unknown flats — no owner info at all
-            String ownerName = flat.getOwnerType() == Flat.OwnerType.RENTED
-                    ? flat.getResidentName() : flat.getOwnerName();
-            if (ownerName == null || ownerName.equals("Unknown") || ownerName.isBlank()) continue;
+            if (flat.getFloor() == 0) continue;
 
-            // Determine name
-            String name;
-            if (flat.getOwnerType() == Flat.OwnerType.RENTED) {
-                name = (flat.getResidentName() != null && !flat.getResidentName().isBlank())
-                        ? flat.getResidentName() : "Resident " + flat.getFlatNo();
-            } else {
-                name = (flat.getOwnerName() != null && !flat.getOwnerName().equals("Unknown")
-                        && !flat.getOwnerName().isBlank())
-                        ? flat.getOwnerName() : "Resident " + flat.getFlatNo();
+            // ── Owner / Admin user ──────────────────────────────────
+            String ownerName = (flat.getOwnerName() != null
+                    && !flat.getOwnerName().equals("Unknown")
+                    && !flat.getOwnerName().isBlank())
+                    ? flat.getOwnerName() : null;
+
+            if (ownerName != null) {
+                String identifier = flat.getFlatNo(); // e.g. "2H"
+                String defaultPw  = flat.getFlatNo() + "@123";
+
+                User.Role role = User.Role.OWNER;
+                if (List.of("2H","4B","4J","2J").contains(flat.getFlatNo()))
+                    role = User.Role.ADMIN;
+
+                Optional<User> existing = userRepository.findByIdentifier(identifier);
+                if (existing.isEmpty()) {
+                    User user = User.builder()
+                            .flatNo(flat.getFlatNo())
+                            .identifier(identifier)
+                            .name(ownerName)
+                            .role(role)
+                            .phone(flat.getOwnerPhone())
+                            .email(flat.getOwnerEmail())
+                            .passwordHash(passwordEncoder.encode(defaultPw))
+                            .firstLogin(true)
+                            .isActive(true)
+                            .build();
+                    userRepository.save(user);
+                    log.info("✅ Owner user: {} / {}", identifier, defaultPw);
+                    created++;
+                } else {
+                    User u = existing.get();
+                    if (u.getPasswordHash() == null || u.getPasswordHash().isBlank()) {
+                        u.setPasswordHash(passwordEncoder.encode(defaultPw));
+                        u.setEmail(flat.getOwnerEmail());
+                        u.setFirstLogin(true);
+                        userRepository.save(u);
+                        updated++;
+                    }
+                }
             }
 
-            // Determine phone
-            String phone = (flat.getOwnerType() == Flat.OwnerType.RENTED)
-                    ? flat.getResidentPhone() : flat.getOwnerPhone();
+            // ── Tenant user (only for rented flats) ─────────────────
+            if (flat.getOwnerType() == Flat.OwnerType.RENTED
+                    && flat.getResidentName() != null
+                    && !flat.getResidentName().isBlank()) {
 
-            // Determine role
-            User.Role role = User.Role.OWNER;
-            if (flat.getOwnerType() == Flat.OwnerType.RENTED) role = User.Role.TENANT;
-            if (List.of("2H", "4B", "4J", "2J").contains(flat.getFlatNo())) role = User.Role.ADMIN;
+                String identifier = flat.getFlatNo() + "_tenant"; // e.g. "4B_tenant"
+                String defaultPw  = flat.getFlatNo() + "_tenant@123";
 
-            // Default password: flatNo@123
-            String defaultPassword = flat.getFlatNo() + "@123";
-
-            List<User> existing = userRepository.findByFlatNo(flat.getFlatNo());
-
-            if (existing.isEmpty()) {
-                // Create new user
-                User user = User.builder()
-                        .flatNo(flat.getFlatNo())
-                        .name(name)
-                        .role(role)
-                        .phone(phone)
-                        .passwordHash(passwordEncoder.encode(defaultPassword))
-                        .firstLogin(true)        // ← changed from .isFirstLogin(true)
-                        .isActive(true)
-                        .build();
-                userRepository.save(user);
-                created++;
-            } else {
-                // Update only if no password set yet
-                User user = existing.get(0);
-                if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
-                    user.setPasswordHash(passwordEncoder.encode(defaultPassword));
-                    user.setFirstLogin(true);
+                Optional<User> existing = userRepository.findByIdentifier(identifier);
+                if (existing.isEmpty()) {
+                    User user = User.builder()
+                            .flatNo(flat.getFlatNo())
+                            .identifier(identifier)
+                            .name(flat.getResidentName())
+                            .role(User.Role.TENANT)
+                            .phone(flat.getResidentPhone())
+                            .email(flat.getResidentEmail())
+                            .passwordHash(passwordEncoder.encode(defaultPw))
+                            .firstLogin(true)
+                            .isActive(true)
+                            .build();
                     userRepository.save(user);
-                    updated++;
+                    log.info("✅ Tenant user: {} / {}", identifier, defaultPw);
+                    created++;
+                } else {
+                    User u = existing.get();
+                    if (u.getPasswordHash() == null || u.getPasswordHash().isBlank()) {
+                        u.setPasswordHash(passwordEncoder.encode(defaultPw));
+                        u.setEmail(flat.getResidentEmail());
+                        u.setFirstLogin(true);
+                        userRepository.save(u);
+                        updated++;
+                    }
                 }
             }
         }
 
-        // Supervisor — no flat
-        if (userRepository.findByPhone("9150625740").isEmpty()) {
+        // ── Supervisor ───────────────────────────────────────────────
+        if (userRepository.findByIdentifier("SUP").isEmpty()) {
             User supervisor = User.builder()
+                    .identifier("SUP")
                     .name("Sharbudeen")
                     .role(User.Role.ADMIN)
                     .phone("9150625740")
@@ -111,7 +136,7 @@ public class DataSeeder implements CommandLineRunner {
                     .isActive(true)
                     .build();
             userRepository.save(supervisor);
-            log.info("✅ Created supervisor with password SUP@123");
+            log.info("✅ Supervisor: SUP / SUP@123");
         }
 
         log.info("✅ Users: {} created, {} updated", created, updated);

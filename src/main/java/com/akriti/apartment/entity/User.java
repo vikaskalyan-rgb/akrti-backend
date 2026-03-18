@@ -16,17 +16,18 @@ public class User {
     @Column(name = "phone", nullable = true)
     private String phone;
 
-    @Column(name = "flat_no", unique = true)
+    @Column(name = "flat_no")
     private String flatNo;
+
+    @Column(name = "identifier", unique = true)
+    private String identifier; // 4B for owner, 4B_tenant for tenant, SUP for supervisor
 
     @Column(nullable = false)
     private String name;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Role role; // ADMIN, OWNER, TENANT
-
-
+    private Role role;
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default
@@ -36,7 +37,6 @@ public class User {
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    // OTP fields (transient storage — cleared after verify)
     @Column(name = "otp_code", length = 6)
     private String otpCode;
 
@@ -55,7 +55,6 @@ public class User {
     @Column(name = "password_reset_otp_expiry")
     private LocalDateTime passwordResetOtpExpiry;
 
-    // To this:
     @Column(name = "is_first_login", nullable = false, columnDefinition = "boolean default true")
     private Boolean firstLogin = true;
 
@@ -63,12 +62,10 @@ public class User {
         ADMIN, OWNER, TENANT
     }
 
-
-
     public boolean isOtpValid(String otp) {
         return otpCode != null
-            && otpCode.equals(otp)
-            && otpExpiresAt != null
-            && LocalDateTime.now().isBefore(otpExpiresAt);
+                && otpCode.equals(otp)
+                && otpExpiresAt != null
+                && LocalDateTime.now().isBefore(otpExpiresAt);
     }
 }
