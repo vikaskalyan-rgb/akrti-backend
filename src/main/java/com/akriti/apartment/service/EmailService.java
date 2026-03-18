@@ -3,34 +3,32 @@ package com.akriti.apartment.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
-import jakarta.mail.internet.MimeMessage;
-import lombok.RequiredArgsConstructor;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
-    private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username:}")
-    private String fromEmail;
+    @Value("${brevo.api.key:}")
+    private String apiKey;
 
     public void sendOtpEmail(String toEmail, String otp, String flatNo) {
-        if (fromEmail == null || fromEmail.isBlank()) {
+        if (apiKey == null || apiKey.isBlank()) {
             log.info("📧 [SIMULATED EMAIL] To: {} | Flat: {} | OTP: {}", toEmail, flatNo, otp);
             return;
         }
         try {
-            MimeMessage message = mailSender.createMimeMessage();;
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            RestTemplate restTemplate = new RestTemplate();
 
-            helper.setFrom(fromEmail, "Akriti Adeshwar Society");
-            helper.setTo(toEmail);
-            helper.setSubject("Akriti Adeshwar — Password Reset OTP");
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("api-key", apiKey);
 
             String html = """
                 <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
@@ -60,9 +58,26 @@ public class EmailService {
                 </div>
                 """.formatted(flatNo, otp);
 
-            helper.setText(html, true);
-            mailSender.send(message);
-            log.info("✅ OTP email sent to {}", toEmail);
+            Map<String, Object> body = new HashMap<>();
+            body.put("sender", Map.of(
+                    "name",  "Akriti Adeshwar Society",
+                    "email", "akritiadeshwar.society@gmail.com"
+            ));
+            body.put("to", List.of(Map.of(
+                    "email", toEmail
+            )));
+            body.put("subject", "Akriti Adeshwar — Password Reset OTP");
+            body.put("htmlContent", html);
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    "https://api.brevo.com/v3/smtp/email",
+                    request,
+                    String.class
+            );
+
+            log.info("✅ Brevo email sent: {}", response.getStatusCode());
 
         } catch (Exception e) {
             log.error("Failed to send email: {}", e.getMessage());
