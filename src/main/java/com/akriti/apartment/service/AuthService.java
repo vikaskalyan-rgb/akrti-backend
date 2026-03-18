@@ -10,8 +10,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 
@@ -24,11 +26,17 @@ public class AuthService {
     @Autowired private FlatRepository flatRepository;
     @Autowired private JwtUtil jwtUtil;
     @Autowired private OtpService otpService;
+    @Autowired private EmailService emailService;
+    private final PasswordEncoder passwordEncoder;
 
     @Value("${app.admin.username}") private String adminUsername;
     @Value("${app.admin.password}") private String adminPassword;
     @Value("${app.admin.name}")     private String adminName;
     @Value("${app.admin.phone}")    private String adminPhone;
+
+    public AuthService(PasswordEncoder passwordEncoder) {
+        this.passwordEncoder = passwordEncoder;
+    }
 
     // ── Admin login ───────────────────────────────────────
     public AuthResponse adminLogin(AdminLoginRequest req) {
@@ -127,5 +135,74 @@ public class AuthService {
             .phone(phone)
             .flatNo(user.getFlatNo())
             .build();
+    }
+
+    // ── Flat + Password Login ──────────────────────────────────────
+    public AuthResponse loginWithPassword(LoginRequest req) {
+        // Find user by flatNo
+        List<User> users = userRepository.findByFlatNo(req.getFlatNo());
+        if (users.isEmpty()) throw new RuntimeException("Flat number not registered");
+        User user = users.get(0);
+
+        // Check password
+        if (!passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
+            throw new RuntimeException("Invalid password");
+        }
+
+        String token = jwtUtil.generateToken(
+                user.getPhone() != null ? user.getPhone() : user.getFlatNo(),
+                user.getRole().name(),
+                user.getFlatNo(),
+                user.getName()
+        );
+
+        return AuthResponse.builder()
+                .token(token)
+                .name(user.getName())
+                .flatNo(user.getFlatNo())
+                .role(user.getRole().name().toLowerCase())
+                .phone(user.getPhone())
+                .isFirstLogin(user.getFirstLogin())
+                .build();
+    }
+
+    // ── Forgot Password — send OTP to email ───────────────────────
+    public void forgotPassword(ForgotPasswordRequest req) {
+        List<User> users = userRepository.findByFlatNo(req.getFlatNo());
+        if (users.isEmpty()) throw new RuntimeException("Flat number not registered");
+        User user = users.get(0);
+
+        if (user.getEmail() == null || !user.getEmail().equalsIgnoreCase(req.getEmail())) {
+            throw new RuntimeException("Email does not match our records for this flat");
+        }
+
+        String otp = String.format("%06d", new java.util.Random().nextInt(999999));
+        user.setPasswordResetOtp(otp);
+        user.setPasswordResetOtpExpiry(LocalDateTime.now().plusMinutes(10));
+        userRepository.save(user);
+
+        emailService.sendOtpEmail(req.getEmail(), otp, req.getFlatNo());
+    }
+
+    // ── Reset Password ─────────────────────────────────────────────
+    public void resetPassword(ResetPasswordRequest req) {
+        List<User> users = userRepository.findByFlatNo(req.getFlatNo());
+        if (users.isEmpty()) throw new RuntimeException("Flat number not registered");
+        User user = users.get(0);
+
+        if (user.getPasswordResetOtp() == null
+                || !user.getPasswordResetOtp().equals(req.getOtp())) {
+            throw new RuntimeException("Invalid OTP");
+        }
+
+        if (user.getPasswordResetOtpExpiry().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("OTP expired. Please request a new one.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(req.getNewPassword()));
+        user.setPasswordResetOtp(null);
+        user.setPasswordResetOtpExpiry(null);
+        user.setFirstLogin(false);
+        userRepository.save(user);
     }
 }

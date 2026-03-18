@@ -13,8 +13,11 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 15)
+    @Column(name = "phone", nullable = true)
     private String phone;
+
+    @Column(name = "flat_no", unique = true)
+    private String flatNo;
 
     @Column(nullable = false)
     private String name;
@@ -23,8 +26,7 @@ public class User {
     @Column(nullable = false)
     private Role role; // ADMIN, OWNER, TENANT
 
-    @Column(name = "flat_no", length = 10)
-    private String flatNo;
+
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default
@@ -41,9 +43,27 @@ public class User {
     @Column(name = "otp_expires_at")
     private LocalDateTime otpExpiresAt;
 
+    @Column(name = "password_hash")
+    private String passwordHash;
+
+    @Column(name = "email")
+    private String email;
+
+    @Column(name = "password_reset_otp")
+    private String passwordResetOtp;
+
+    @Column(name = "password_reset_otp_expiry")
+    private LocalDateTime passwordResetOtpExpiry;
+
+    // To this:
+    @Column(name = "is_first_login", nullable = false, columnDefinition = "boolean default true")
+    private Boolean firstLogin = true;
+
     public enum Role {
         ADMIN, OWNER, TENANT
     }
+
+
 
     public boolean isOtpValid(String otp) {
         return otpCode != null

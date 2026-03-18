@@ -33,10 +33,11 @@ public class OtpService {
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             Map<String, Object> body = new HashMap<>();
-            body.put("route", "otp");
-            body.put("variables_values", otp);
+            body.put("route", "q");
+            body.put("message", "Your Akriti Adeshwar login OTP is: " + otp + ". Valid for 10 minutes. Do not share with anyone.");
             body.put("numbers", phone);
             body.put("flash", 0);
+            body.put("language", "english");
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 

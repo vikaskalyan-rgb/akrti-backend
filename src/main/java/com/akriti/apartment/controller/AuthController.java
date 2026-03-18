@@ -42,4 +42,44 @@ public class AuthController {
                 .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
         }
     }
+    // ── Flat + Password Login ──────────────────────────────────────
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest req) {
+        try {
+            return ResponseEntity.ok(authService.loginWithPassword(req));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
+        }
+    }
+
+    // ── Forgot Password ────────────────────────────────────────────
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest req) {
+        try {
+            authService.forgotPassword(req);
+            return ResponseEntity.ok(
+                    MessageResponse.builder()
+                            .message("OTP sent to your registered email")
+                            .success(true).build());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
+        }
+    }
+
+    // ── Reset Password ─────────────────────────────────────────────
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest req) {
+        try {
+            authService.resetPassword(req);
+            return ResponseEntity.ok(
+                    MessageResponse.builder()
+                            .message("Password reset successfully")
+                            .success(true).build());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
+        }
+    }
 }
