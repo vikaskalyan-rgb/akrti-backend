@@ -16,6 +16,8 @@ public interface MaintenancePaymentRepository extends JpaRepository<MaintenanceP
     boolean existsByFlatNoAndMonthAndYear(String flatNo, int month, int year);
     List<MaintenancePayment> findByFlatNoAndStatus(
             String flatNo, MaintenancePayment.PaymentStatus status);
+    List<MaintenancePayment> findByFlatNoAndYearGreaterThanEqualOrderByYearAscMonthAsc(
+            String flatNo, int year);
 
     @Query("SELECT p FROM MaintenancePayment p WHERE p.month = :month AND p.year = :year AND p.status = 'UNPAID'")
     List<MaintenancePayment> findUnpaidByMonthAndYear(int month, int year);

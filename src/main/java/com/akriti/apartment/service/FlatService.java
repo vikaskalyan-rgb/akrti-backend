@@ -54,17 +54,18 @@ public class FlatService {
         }
 
         Flat saved = flatRepository.save(flat);
-        // Sync maintenance amount to ALL UNPAID payment records for this flat
         if (req.getMaintenanceAmount() != null) {
-            List<MaintenancePayment> unpaidPayments = paymentRepository
-                    .findByFlatNoAndStatus(flat.getFlatNo(),
-                            MaintenancePayment.PaymentStatus.UNPAID);
+            // Update ALL payment records from Jan 2026 onwards for this flat
+            // Both PAID and UNPAID — amount reflects what was/is owed
+            List<MaintenancePayment> allPayments = paymentRepository
+                    .findByFlatNoAndYearGreaterThanEqualOrderByYearAscMonthAsc(
+                            flat.getFlatNo(), 2026);
 
-            if (!unpaidPayments.isEmpty()) {
-                unpaidPayments.forEach(p -> p.setAmount(req.getMaintenanceAmount()));
-                paymentRepository.saveAll(unpaidPayments);
-                log.info("✅ Updated {} unpaid dues for {} to ₹{}",
-                        unpaidPayments.size(), flat.getFlatNo(), req.getMaintenanceAmount());
+            if (!allPayments.isEmpty()) {
+                allPayments.forEach(p -> p.setAmount(req.getMaintenanceAmount()));
+                paymentRepository.saveAll(allPayments);
+                log.info("✅ Updated {} payment records for {} to ₹{}",
+                        allPayments.size(), flat.getFlatNo(), req.getMaintenanceAmount());
             }
         }
 
