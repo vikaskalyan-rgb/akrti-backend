@@ -2,8 +2,10 @@ package com.akriti.apartment.service;
 
 import com.akriti.apartment.dto.FlatRequest;
 import com.akriti.apartment.entity.Flat;
+import com.akriti.apartment.entity.MaintenancePayment;
 import com.akriti.apartment.entity.User;
 import com.akriti.apartment.repository.FlatRepository;
+import com.akriti.apartment.repository.MaintenancePaymentRepository;
 import com.akriti.apartment.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +24,7 @@ public class FlatService {
     @Autowired private FlatRepository flatRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private MaintenancePaymentRepository paymentRepository;
 
     public List<Flat> getAll() {
         return flatRepository.findByIsActiveTrue();
@@ -51,6 +54,19 @@ public class FlatService {
         }
 
         Flat saved = flatRepository.save(flat);
+        // Sync maintenance amount to ALL UNPAID payment records for this flat
+        if (req.getMaintenanceAmount() != null) {
+            List<MaintenancePayment> unpaidPayments = paymentRepository
+                    .findByFlatNoAndStatus(flat.getFlatNo(),
+                            MaintenancePayment.PaymentStatus.UNPAID);
+
+            if (!unpaidPayments.isEmpty()) {
+                unpaidPayments.forEach(p -> p.setAmount(req.getMaintenanceAmount()));
+                paymentRepository.saveAll(unpaidPayments);
+                log.info("✅ Updated {} unpaid dues for {} to ₹{}",
+                        unpaidPayments.size(), flat.getFlatNo(), req.getMaintenanceAmount());
+            }
+        }
 
         // Sync to users table
         syncOwnerUser(saved);
