@@ -14,4 +14,5 @@ public class FlatRequest {
     private String residentPhone;
     private String residentEmail;
     private String parkingSlot;
+    private Integer maintenanceAmount;
 }

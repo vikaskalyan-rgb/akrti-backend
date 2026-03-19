@@ -2,6 +2,8 @@ package com.akriti.apartment.controller;
 
 import com.akriti.apartment.dto.MarkPaymentRequest;
 import com.akriti.apartment.dto.MessageResponse;
+import com.akriti.apartment.entity.User;
+import com.akriti.apartment.repository.UserRepository;
 import com.akriti.apartment.service.MaintenanceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -9,6 +11,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/maintenance")
@@ -16,6 +20,7 @@ public class MaintenanceController {
 
     @Autowired
     private MaintenanceService maintenanceService;
+    @Autowired private UserRepository userRepository;
 
     // ── Get payments for a month (admin + resident) ───────
     @GetMapping
@@ -75,19 +80,31 @@ public class MaintenanceController {
         }
     }
 
-    // ── Send reminders to defaulters (admin only) ─────────
     @PostMapping("/reminders")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> sendReminders(
             @RequestParam(defaultValue = "0") int month,
-            @RequestParam(defaultValue = "0") int year) {
+            @RequestParam(defaultValue = "0") int year,
+            @RequestParam(required = false) String flatNo) {
         if (month == 0) month = LocalDate.now().getMonthValue();
         if (year  == 0) year  = LocalDate.now().getYear();
-        int count = maintenanceService.sendReminders(month, year);
-        return ResponseEntity.ok(
-            MessageResponse.builder()
-                .message("Reminders sent to " + count + " defaulters")
-                .success(true).build());
+
+        // Single flat reminder
+        if (flatNo != null && !flatNo.isBlank()) {
+            List<User> users = userRepository.findByFlatNo(flatNo);
+            boolean hasEmail = users.stream()
+                    .anyMatch(u -> u.getEmail() != null && !u.getEmail().isBlank());
+            if (!hasEmail) {
+                return ResponseEntity.ok(Map.of(
+                        "message", "No email registered for flat " + flatNo,
+                        "sent", 0,
+                        "skipped", 1
+                ));
+            }
+        }
+
+        Map<String, Object> result = maintenanceService.sendReminders(month, year);
+        return ResponseEntity.ok(result);
     }
 
     // ── Manually trigger due generation (admin only) ──────

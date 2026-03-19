@@ -8,6 +8,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/announcements")
 public class AnnouncementController {
@@ -24,6 +26,10 @@ public class AnnouncementController {
             return ResponseEntity.ok(announcementService.getAll());
         }
         return ResponseEntity.ok(announcementService.getForResident(auth.getName()));
+    }
+    @GetMapping("/recipient-count")
+    public ResponseEntity<?> getRecipientCount(@RequestParam String audience) {
+        return ResponseEntity.ok(Map.of("count", announcementService.getRecipientCount(audience)));
     }
 
     @PostMapping

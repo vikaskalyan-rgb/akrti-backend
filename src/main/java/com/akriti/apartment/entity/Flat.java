@@ -15,6 +15,10 @@ public class Flat {
     @Column(nullable = false)
     private Integer floor;
 
+    @Column(name = "maintenance_amount", nullable = false)
+    @Builder.Default
+    private Integer maintenanceAmount = 4200;
+
     @Column(nullable = false, length = 5)
     private String unit;
 

@@ -43,6 +43,7 @@ public class FlatService {
         if (req.getResidentPhone() != null) flat.setResidentPhone(req.getResidentPhone());
         if (req.getResidentEmail() != null) flat.setResidentEmail(req.getResidentEmail());
         if (req.getParkingSlot()   != null) flat.setParkingSlot(req.getParkingSlot());
+        if (req.getMaintenanceAmount() != null) flat.setMaintenanceAmount(req.getMaintenanceAmount());
         if (req.getOwnerType()     != null) {
             flat.setOwnerType(Flat.OwnerType.valueOf(
                     req.getOwnerType().toUpperCase()

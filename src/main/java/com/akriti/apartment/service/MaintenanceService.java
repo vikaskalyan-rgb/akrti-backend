@@ -4,6 +4,8 @@ import com.akriti.apartment.dto.MarkPaymentRequest;
 import com.akriti.apartment.entity.*;
 import com.akriti.apartment.repository.*;
 import com.akriti.apartment.websocket.WebSocketPublisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -15,9 +17,12 @@ import java.util.*;
 @Service
 public class MaintenanceService {
 
+    private static final Logger log = LoggerFactory.getLogger(MaintenanceService.class);
+
     @Autowired private MaintenancePaymentRepository paymentRepository;
     @Autowired private FlatRepository flatRepository;
-    @Autowired private WhatsAppService whatsAppService;
+    @Autowired private UserRepository userRepository;
+    @Autowired private EmailService emailService;
     @Autowired private WebSocketPublisher wsPublisher;
 
     @Value("${app.monthly.maintenance:4200}")
@@ -36,10 +41,10 @@ public class MaintenanceService {
     // ── Get single payment ────────────────────────────────
     public MaintenancePayment getPayment(String flatNo, int month, int year) {
         return paymentRepository.findByFlatNoAndMonthAndYear(flatNo, month, year)
-            .orElseThrow(() -> new RuntimeException("Payment record not found"));
+                .orElseThrow(() -> new RuntimeException("Payment record not found"));
     }
 
-    // ── Mark as paid by admin (for their own flat, no phone check) ──
+    // ── Mark as paid by admin (for their own flat) ────────
     @Transactional
     public MaintenancePayment markPaidByAdmin(String flatNo, int month, int year,
                                               MarkPaymentRequest req) {
@@ -72,28 +77,26 @@ public class MaintenanceService {
     @Transactional
     public MaintenancePayment markPaid(String flatNo, int month, int year,
                                        MarkPaymentRequest req, String callerPhone) {
-        // Verify caller is the payer for this flat
         Flat flat = flatRepository.findById(flatNo)
-            .orElseThrow(() -> new RuntimeException("Flat not found"));
+                .orElseThrow(() -> new RuntimeException("Flat not found"));
 
         String payerPhone = flat.getPayerPhone();
         if (!callerPhone.equals(payerPhone)) {
-            // Also allow owner to pay for their own vacant/rented flat
             if (!callerPhone.equals(flat.getOwnerPhone())) {
                 throw new RuntimeException("You are not authorized to mark payment for this flat");
             }
         }
 
         MaintenancePayment payment = paymentRepository
-            .findByFlatNoAndMonthAndYear(flatNo, month, year)
-            .orElseThrow(() -> new RuntimeException("Payment record not found"));
+                .findByFlatNoAndMonthAndYear(flatNo, month, year)
+                .orElseThrow(() -> new RuntimeException("Payment record not found"));
 
         if (payment.getStatus() == MaintenancePayment.PaymentStatus.PAID) {
             throw new RuntimeException("Payment already marked as paid");
         }
 
         MaintenancePayment.PaymentMode mode = MaintenancePayment.PaymentMode.valueOf(
-            req.getPaymentMode().toUpperCase().replace(" ", "_")
+                req.getPaymentMode().toUpperCase().replace(" ", "_")
         );
 
         payment.setStatus(MaintenancePayment.PaymentStatus.PAID);
@@ -105,39 +108,38 @@ public class MaintenanceService {
         payment.setUpdatedAt(LocalDateTime.now());
 
         MaintenancePayment saved = paymentRepository.save(payment);
-
-        // Push WebSocket event so admin dashboard updates instantly
         wsPublisher.paymentUpdated(flatNo, month, year);
-
         return saved;
     }
 
-    // ── Auto-generate dues for all flats (called by scheduler) ──
+    // ── Auto-generate dues for all flats ──────────────────
     @Transactional
     public int generateMonthlyDues(int month, int year) {
         List<Flat> flats = flatRepository.findByIsActiveTrue();
         int count = 0;
 
         for (Flat flat : flats) {
-            if (flat.getFloor() == 0) continue; // skip ground floor utility units
+            if (flat.getFloor() == 0) continue;
 
             boolean exists = paymentRepository.existsByFlatNoAndMonthAndYear(
-                flat.getFlatNo(), month, year);
+                    flat.getFlatNo(), month, year);
+            int flatAmount = flat.getMaintenanceAmount() != null
+                    ? flat.getMaintenanceAmount() : monthlyAmount;
 
             if (!exists) {
                 MaintenancePayment payment = MaintenancePayment.builder()
-                    .flatNo(flat.getFlatNo())
-                    .month(month)
-                    .year(year)
-                    .amount(monthlyAmount)
-                    .status(MaintenancePayment.PaymentStatus.UNPAID)
-                    .payerName(flat.getPayerName())
-                    .payerPhone(flat.getPayerPhone())
-                    .payerRole(flat.getOwnerType() == Flat.OwnerType.RENTED ? "tenant" : "owner")
-                    .ownerType(flat.getOwnerType().name())
-                    .ownerName(flat.getOwnerName())
-                    .ownerPhone(flat.getOwnerPhone())
-                    .build();
+                        .flatNo(flat.getFlatNo())
+                        .month(month)
+                        .year(year)
+                        .amount(flatAmount)
+                        .status(MaintenancePayment.PaymentStatus.UNPAID)
+                        .payerName(flat.getPayerName())
+                        .payerPhone(flat.getPayerPhone())
+                        .payerRole(flat.getOwnerType() == Flat.OwnerType.RENTED ? "tenant" : "owner")
+                        .ownerType(flat.getOwnerType().name())
+                        .ownerName(flat.getOwnerName())
+                        .ownerPhone(flat.getOwnerPhone())
+                        .build();
 
                 paymentRepository.save(payment);
                 count++;
@@ -146,24 +148,71 @@ public class MaintenanceService {
         return count;
     }
 
-    // ── Send WhatsApp reminders to all defaulters ─────────
-    public int sendReminders(int month, int year) {
+    // ── Send email reminders to all defaulters ────────────
+    public Map<String, Object> sendReminders(int month, int year) {
         List<MaintenancePayment> unpaid = paymentRepository
-            .findUnpaidByMonthAndYear(month, year);
+                .findUnpaidByMonthAndYear(month, year);
 
         String monthLabel = getMonthLabel(month, year);
-        int count = 0;
+        int sent = 0, skipped = 0;
 
         for (MaintenancePayment p : unpaid) {
-            if (p.getPayerPhone() != null) {
-                whatsAppService.sendMaintenanceReminder(
-                    p.getPayerPhone(), p.getPayerName(),
-                    p.getFlatNo(), monthlyAmount, monthLabel
+            // Find user by identifier (flat owner) or flat_tenant
+            String email = null;
+
+            // Try owner first
+            List<User> owners = userRepository.findByFlatNo(p.getFlatNo());
+            User ownerUser = owners.stream()
+                    .filter(u -> u.getIdentifier() != null
+                            && !u.getIdentifier().endsWith("_tenant"))
+                    .findFirst().orElse(null);
+
+            // If rented, try tenant
+            if ("RENTED".equals(p.getOwnerType())) {
+                User tenantUser = owners.stream()
+                        .filter(u -> u.getIdentifier() != null
+                                && u.getIdentifier().endsWith("_tenant"))
+                        .findFirst().orElse(null);
+                if (tenantUser != null && tenantUser.getEmail() != null
+                        && !tenantUser.getEmail().isBlank()) {
+                    email = tenantUser.getEmail();
+                }
+            }
+
+            // Fall back to owner email
+            if (email == null && ownerUser != null
+                    && ownerUser.getEmail() != null
+                    && !ownerUser.getEmail().isBlank()) {
+                email = ownerUser.getEmail();
+            }
+
+            if (email == null) {
+                log.warn("⚠ No email for flat {} — skipping reminder", p.getFlatNo());
+                skipped++;
+                continue;
+            }
+
+            try {
+                emailService.sendMaintenanceReminder(
+                        email,
+                        p.getFlatNo(),
+                        p.getPayerName(),
+                        monthLabel,
+                        p.getAmount()
                 );
-                count++;
+                sent++;
+            } catch (Exception e) {
+                log.error("Failed to send reminder for flat {}: {}", p.getFlatNo(), e.getMessage());
+                skipped++;
             }
         }
-        return count;
+
+        log.info("📧 Reminders: {} sent, {} skipped", sent, skipped);
+        return Map.of(
+                "message", sent + " reminder emails sent, " + skipped + " skipped (no email)",
+                "sent", sent,
+                "skipped", skipped
+        );
     }
 
     // ── Dashboard summary ─────────────────────────────────
@@ -172,24 +221,25 @@ public class MaintenanceService {
         long paid    = payments.stream().filter(p -> p.getStatus() == MaintenancePayment.PaymentStatus.PAID).count();
         long unpaid  = payments.stream().filter(p -> p.getStatus() == MaintenancePayment.PaymentStatus.UNPAID).count();
         int collected = payments.stream()
-            .filter(p -> p.getStatus() == MaintenancePayment.PaymentStatus.PAID)
-            .mapToInt(MaintenancePayment::getAmount).sum();
-        int pending  = (int)(unpaid * monthlyAmount);
+                .filter(p -> p.getStatus() == MaintenancePayment.PaymentStatus.PAID)
+                .mapToInt(MaintenancePayment::getAmount).sum();
+        int pending = (int)(unpaid * monthlyAmount);
 
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("month", month);
-        summary.put("year", year);
-        summary.put("paid", paid);
-        summary.put("unpaid", unpaid);
-        summary.put("total", payments.size());
-        summary.put("collected", collected);
-        summary.put("pending", pending);
+        summary.put("month",         month);
+        summary.put("year",          year);
+        summary.put("paid",          paid);
+        summary.put("unpaid",        unpaid);
+        summary.put("total",         payments.size());
+        summary.put("collected",     collected);
+        summary.put("pending",       pending);
         summary.put("monthlyAmount", monthlyAmount);
         return summary;
     }
 
     private String getMonthLabel(int month, int year) {
-        String[] months = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+        String[] months = {"Jan","Feb","Mar","Apr","May","Jun",
+                "Jul","Aug","Sep","Oct","Nov","Dec"};
         return months[month - 1] + " " + year;
     }
 }
