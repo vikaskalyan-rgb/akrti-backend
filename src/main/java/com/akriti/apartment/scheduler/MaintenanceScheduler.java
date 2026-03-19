@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import java.time.LocalDate;
+import java.util.Map;
 
 @Component
 public class MaintenanceScheduler {
@@ -40,11 +41,11 @@ public class MaintenanceScheduler {
         int month = today.getMonthValue();
         int year  = today.getYear();
 
-        log.info("📱 Scheduler: Sending reminders for {}/{}", month, year);
+        log.info("📧 Scheduler: Sending email reminders for {}/{}", month, year);
 
         try {
-            int count = maintenanceService.sendReminders(month, year);
-            log.info("✅ Sent {} WhatsApp reminders", count);
+            Map<String, Object> result = maintenanceService.sendReminders(month, year);
+            log.info("✅ {}", result.get("message"));
         } catch (Exception e) {
             log.error("❌ Failed to send reminders: {}", e.getMessage());
         }
