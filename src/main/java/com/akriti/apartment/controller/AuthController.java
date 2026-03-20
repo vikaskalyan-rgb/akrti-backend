@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -81,5 +83,10 @@ public class AuthController {
             return ResponseEntity.badRequest()
                     .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
         }
+    }
+
+    @GetMapping("/api/health")
+    public ResponseEntity<?> health() {
+        return ResponseEntity.ok(Map.of("status", "UP", "app", "Akriti Adeshwar"));
     }
 }
