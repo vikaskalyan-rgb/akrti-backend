@@ -84,9 +84,4 @@ public class AuthController {
                     .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
         }
     }
-
-    @GetMapping("/api/health")
-    public ResponseEntity<?> health() {
-        return ResponseEntity.ok(Map.of("status", "UP", "app", "Akriti Adeshwar"));
-    }
 }
