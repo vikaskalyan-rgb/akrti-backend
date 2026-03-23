@@ -5,6 +5,7 @@ import lombok.Data;
 @Data
 public class WorkerRequest {
     private String name;
+    private String addedByFlat;
     private String role;
     private String phone;
     private String email;

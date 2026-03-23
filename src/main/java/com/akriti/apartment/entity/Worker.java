@@ -61,6 +61,8 @@ public class Worker {
     @Column(name = "updated_at")
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
+    @Column(name = "added_by_flat", length = 10)
+    private String addedByFlat;
 
     public enum WorkerRole {
         SECURITY, SUPERVISOR, MAID, ELECTRICIAN, PLUMBER, OTHER
