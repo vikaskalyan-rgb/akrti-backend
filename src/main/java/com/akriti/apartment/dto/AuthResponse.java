@@ -8,4 +8,5 @@ public class AuthResponse {
     private String phone;
     private String flatNo;
     private Boolean isFirstLogin;
+    private String identifier;
 }
