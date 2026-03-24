@@ -2,6 +2,7 @@ package com.akriti.apartment.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -14,6 +15,11 @@ import java.util.Map;
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+    @Autowired
+    private com.akriti.apartment.repository.UserRepository userRepository;
+
+    @Autowired
+    private com.akriti.apartment.repository.MaintenancePaymentRepository paymentRepository;
 
     @Value("${brevo.api.key:}")
     private String apiKey;
@@ -466,6 +472,102 @@ public class EmailService {
 
         } catch (Exception e) {
             log.error("Failed to send booking status email: {}", e.getMessage());
+        }
+    }
+
+
+    public void sendMonthlyDuesNotification(int month, int year) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.info("📧 [SIMULATED] Monthly dues notification for {}/{}", month, year);
+            return;
+        }
+
+        String monthLabel = java.time.YearMonth.of(year, month)
+                .format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy"));
+
+        // Get all active users with email
+        List<com.akriti.apartment.entity.User> users = userRepository.findAll()
+                .stream()
+                .filter(u -> u.getEmail() != null && !u.getEmail().isBlank())
+                .filter(u -> u.getIsActive() != null && u.getIsActive())
+                .toList();
+
+        log.info("📧 Sending monthly dues notification to {} residents", users.size());
+
+        for (com.akriti.apartment.entity.User user : users) {
+            try {
+                // Get their specific payment amount
+                var payment = paymentRepository
+                        .findByFlatNoAndMonthAndYear(user.getFlatNo(), month, year);
+
+                int amount = payment.map(p -> p.getAmount()).orElse(4200);
+
+                RestTemplate restTemplate = new RestTemplate();
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.set("api-key", apiKey);
+
+                String html = """
+                <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+                  <div style="background:#5b52f0;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
+                    <h2 style="color:white;margin:0;font-size:20px;">Monthly Maintenance</h2>
+                    <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:13px;">
+                      Akriti Adeshwar Society
+                    </p>
+                  </div>
+                  <div style="background:#f8f8ff;padding:28px;border-radius:0 0 12px 12px;
+                              border:1px solid #e0e0f0;">
+                    <p style="color:#333;font-size:14px;margin:0 0 12px;">
+                      Dear <strong>Flat %s</strong>,
+                    </p>
+                    <p style="color:#555;font-size:14px;margin:0 0 20px;">
+                      Your maintenance for <strong>%s</strong> has been generated.
+                    </p>
+                    <div style="background:white;border:2px solid #5b52f0;border-radius:12px;
+                                padding:20px;text-align:center;margin:0 0 20px;">
+                      <div style="font-size:13px;color:#888;margin-bottom:4px;">Amount Due</div>
+                      <span style="font-size:36px;font-weight:bold;color:#5b52f0;">
+                        ₹%s
+                      </span>
+                    </div>
+                    <p style="color:#555;font-size:13px;margin:0 0 8px;">
+                      Please pay via UPI and mark as paid on the society portal.
+                    </p>
+                    <p style="color:#888;font-size:11px;margin:0 0 16px;">
+                      UPI ID: ppr.05219.21092023.00196023@cnrb<br/>
+                      Account: 5219101005304 · IFSC: CNRB0005219
+                    </p>
+                    <p style="color:#aaa;font-size:10px;margin:0;">
+                      Login at your society portal to mark payment after paying.
+                    </p>
+                  </div>
+                </div>
+                """.formatted(
+                        user.getFlatNo(),
+                        monthLabel,
+                        String.format("%,d", amount)
+                );
+
+                Map<String, Object> body = new HashMap<>();
+                body.put("sender", Map.of(
+                        "name",  "Akriti Adeshwar Society",
+                        "email", "akritiadeshwar.society@gmail.com"
+                ));
+                body.put("to", List.of(Map.of("email", user.getEmail())));
+                body.put("subject",
+                        "🏠 Maintenance Due — " + monthLabel + " · Flat " + user.getFlatNo());
+                body.put("htmlContent", html);
+
+                HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+                restTemplate.postForEntity(
+                        "https://api.brevo.com/v3/smtp/email", request, String.class);
+
+                log.info("✅ Monthly dues email sent to flat {}", user.getFlatNo());
+
+            } catch (Exception e) {
+                log.error("Failed to send monthly dues email to flat {}: {}",
+                        user.getFlatNo(), e.getMessage());
+            }
         }
     }
 }
