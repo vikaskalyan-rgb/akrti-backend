@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static com.akriti.apartment.service.FlatService.log;
 
@@ -22,6 +23,7 @@ public class DeliveryController {
     @Autowired private DeliveryRepository repo;
     @Autowired private UserRepository userRepository;
     @Autowired private EmailService emailService;
+    @Autowired private DeliveryRepository deliveryRepository;
 
     // All roles — view
     @GetMapping
@@ -54,29 +56,37 @@ public class DeliveryController {
         repo.deleteById(id);
         return ResponseEntity.ok().build();
     }
+    // Add sendEmail field to Delivery entity or read from request body
     @PostMapping
     @PreAuthorize("hasRole('SUPERVISOR') or hasRole('ADMIN')")
-    public ResponseEntity<?> log(@RequestBody Delivery delivery) {
+    public ResponseEntity<?> log(@RequestBody Map<String, Object> req) {
+        Delivery delivery = new Delivery();
+        delivery.setFlatNo((String) req.get("flatNo"));
+        delivery.setCourierName((String) req.get("courierName"));
+        delivery.setDescription((String) req.get("description"));
+        delivery.setLoggedBy((String) req.get("loggedBy"));
         delivery.setLoggedAt(LocalDateTime.now());
         delivery.setStatus("PENDING");
-        Delivery saved = repo.save(delivery);
+        Delivery saved = deliveryRepository.save(delivery);
 
-        // Send email to resident if they have one
-        try {
-            List<User> users = userRepository.findByFlatNo(delivery.getFlatNo());
-            users.stream()
-                    .filter(u -> u.getEmail() != null && !u.getEmail().isBlank())
-                    .findFirst()
-                    .ifPresent(u -> emailService.sendDeliveryNotification(
-                            u.getEmail(),
-                            delivery.getFlatNo(),
-                            delivery.getCourierName(),
-                            delivery.getDescription()
-                    ));
-        } catch (Exception e) {
-            log.warn("Could not send delivery email: {}", e.getMessage());
+        // Only send email if frontend requested it
+        Boolean sendEmail = (Boolean) req.getOrDefault("sendEmail", Boolean.TRUE);
+        if (Boolean.TRUE.equals(sendEmail)) {
+            try {
+                List<User> users = userRepository.findByFlatNo(delivery.getFlatNo());
+                users.stream()
+                        .filter(u -> u.getEmail() != null && !u.getEmail().isBlank())
+                        .findFirst()
+                        .ifPresent(u -> emailService.sendDeliveryNotification(
+                                u.getEmail(),
+                                delivery.getFlatNo(),
+                                delivery.getCourierName(),
+                                delivery.getDescription()
+                        ));
+            } catch (Exception e) {
+                log.warn("Could not send delivery email: {}", e.getMessage());
+            }
         }
-
         return ResponseEntity.ok(saved);
     }
 }
