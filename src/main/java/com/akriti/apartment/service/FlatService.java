@@ -19,7 +19,7 @@ import java.util.Optional;
 @Service
 public class FlatService {
 
-    private static final Logger log = LoggerFactory.getLogger(FlatService.class);
+    public static final Logger log = LoggerFactory.getLogger(FlatService.class);
 
     @Autowired private FlatRepository flatRepository;
     @Autowired private UserRepository userRepository;
