@@ -164,7 +164,7 @@ public class AuthService {
                 .role(user.getRole().name().toLowerCase())
                 .phone(user.getPhone())
                 .isFirstLogin(user.getFirstLogin())
-                .identifier(user.getIdentifier())   
+                .identifier(user.getIdentifier())
                 .build();
     }
 
