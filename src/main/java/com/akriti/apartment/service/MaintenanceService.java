@@ -112,6 +112,18 @@ public class MaintenanceService {
         return saved;
     }
 
+    public MaintenancePayment markUnpaid(String flatNo, int month, int year) {
+        MaintenancePayment payment = paymentRepository
+                .findByFlatNoAndMonthAndYear(flatNo, month, year)
+                .orElseThrow(() -> new RuntimeException("Payment record not found"));
+        payment.setStatus(MaintenancePayment.PaymentStatus.UNPAID);
+        payment.setPaidOn(null);
+        payment.setPaymentMode(null);
+        payment.setTransactionRef(null);
+        payment.setUpdatedAt(LocalDateTime.now());
+        return paymentRepository.save(payment);
+    }
+
     // ── Auto-generate dues for all flats ──────────────────
     @Transactional
     public int generateMonthlyDues(int month, int year) {

@@ -121,4 +121,16 @@ public class MaintenanceController {
                 .message("Generated " + count + " new payment records")
                 .success(true).build());
     }
+
+    @PostMapping("/flat/{flatNo}/unpay")
+    public ResponseEntity<?> markUnpaid(@PathVariable String flatNo,
+                                        @RequestParam int month,
+                                        @RequestParam int year) {
+        try {
+            return ResponseEntity.ok(maintenanceService.markUnpaid(flatNo, month, year));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
+        }
+    }
 }
