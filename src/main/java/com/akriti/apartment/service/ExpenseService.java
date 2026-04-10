@@ -24,6 +24,11 @@ public class ExpenseService {
         return expenseRepository.findByYearOrderByDateAsc(year);
     }
 
+    public int getAllTimeExpenses() {
+        return expenseRepository.findAll().stream()
+                .mapToInt(Expense::getAmount).sum();
+    }
+
     public Expense create(ExpenseRequest req) {
         LocalDate date = req.getDate() != null ? req.getDate() : LocalDate.now();
         Expense expense = Expense.builder()

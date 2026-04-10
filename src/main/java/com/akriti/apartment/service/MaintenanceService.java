@@ -28,6 +28,14 @@ public class MaintenanceService {
     @Value("${app.monthly.maintenance:4200}")
     private int monthlyAmount;
 
+    public int getAllTimeCollected() {
+        return paymentRepository.findAll().stream()
+                .filter(p -> p.getStatus() == MaintenancePayment.PaymentStatus.PAID
+                        || p.getStatus() == MaintenancePayment.PaymentStatus.PARTIAL)
+                .mapToInt(p -> p.getPaidAmount() != null ? p.getPaidAmount() : 0)
+                .sum();
+    }
+
     // ── Get all payments for a month ──────────────────────
     public List<MaintenancePayment> getMonthPayments(int month, int year) {
         return paymentRepository.findByMonthAndYear(month, year);

@@ -20,6 +20,7 @@ public class DashboardController {
     @Autowired private ComplaintRepository complaintRepository;
     @Autowired private VisitorService visitorService;
     @Autowired private FlatRepository flatRepository;
+    @Autowired private SocietySettingsRepository settingsRepo;
 
     @Value("${app.monthly.maintenance:4200}")
     private int monthlyAmount;
@@ -64,9 +65,18 @@ public class DashboardController {
         ));
 
         // Society fund (static for now — wire to a Fund table later)
+        // Get opening balance from DB
+        int openingBalance = settingsRepo.findById("opening_balance")
+                .map(s -> Integer.parseInt(s.getValue())).orElse(0);
+
+// Get total collected and expenses from inception
+        int allTimeCollected = maintenanceService.getAllTimeCollected();
+        int allTimeExpenses  = expenseService.getAllTimeExpenses();
+        int corpus = openingBalance + allTimeCollected - allTimeExpenses;
+
         dashboard.put("societyFund", Map.of(
-            "currentBalance", 382000,
-            "lastUpdated", LocalDate.now().toString()
+                "currentBalance", corpus,
+                "lastUpdated",    LocalDate.now().toString()
         ));
 
         return ResponseEntity.ok(dashboard);
