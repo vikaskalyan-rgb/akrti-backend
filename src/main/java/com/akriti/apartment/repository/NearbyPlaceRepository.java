@@ -5,4 +5,5 @@ import java.util.List;
 
 public interface NearbyPlaceRepository extends JpaRepository<NearbyPlace, Long> {
     List<NearbyPlace> findByIsActiveTrueOrderByCategoryAscNameAsc();
+    
 }
