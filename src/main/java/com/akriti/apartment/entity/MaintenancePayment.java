@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "maintenance_payments",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"flat_no", "month", "year"}))
+        uniqueConstraints = @UniqueConstraint(columnNames = {"flat_no", "month", "year"}))
 @Data @NoArgsConstructor @AllArgsConstructor @Builder
 public class MaintenancePayment {
 
@@ -19,7 +19,7 @@ public class MaintenancePayment {
     private String flatNo;
 
     @Column(nullable = false)
-    private Integer month; // 1-12
+    private Integer month;
 
     @Column(nullable = false)
     private Integer year;
@@ -27,6 +27,10 @@ public class MaintenancePayment {
     @Column(nullable = false)
     @Builder.Default
     private Integer amount = 4200;
+
+    // ── NEW: how much the resident actually paid ──────────
+    @Column(name = "paid_amount")
+    private Integer paidAmount;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -46,7 +50,7 @@ public class MaintenancePayment {
     private String payerPhone;
 
     @Column(name = "payer_role", length = 10)
-    private String payerRole; // owner / tenant
+    private String payerRole;
 
     @Column(name = "owner_type", length = 20)
     private String ownerType;
@@ -72,8 +76,14 @@ public class MaintenancePayment {
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
 
+    // ── Helper: balance remaining ─────────────────────────
+    public int getBalance() {
+        if (paidAmount == null || amount == null) return amount != null ? amount : 0;
+        return Math.max(0, amount - paidAmount);
+    }
+
     public enum PaymentStatus {
-        PAID, UNPAID
+        PAID, UNPAID, PARTIAL   // ← PARTIAL added
     }
 
     public enum PaymentMode {

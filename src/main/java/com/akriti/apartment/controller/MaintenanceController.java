@@ -133,4 +133,15 @@ public class MaintenanceController {
                     .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
         }
     }
+    @PostMapping("/flat/{flatNo}/waive")
+    public ResponseEntity<?> waiveBalance(@PathVariable String flatNo,
+                                          @RequestParam int month,
+                                          @RequestParam int year) {
+        try {
+            return ResponseEntity.ok(maintenanceService.waiveBalance(flatNo, month, year));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(MessageResponse.builder().message(e.getMessage()).success(false).build());
+        }
+    }
 }

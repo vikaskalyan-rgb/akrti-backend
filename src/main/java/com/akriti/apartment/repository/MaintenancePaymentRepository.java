@@ -3,6 +3,7 @@ package com.akriti.apartment.repository;
 import com.akriti.apartment.entity.MaintenancePayment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +20,7 @@ public interface MaintenancePaymentRepository extends JpaRepository<MaintenanceP
     List<MaintenancePayment> findByFlatNoAndYearGreaterThanEqualOrderByYearAscMonthAsc(
             String flatNo, int year);
 
-    @Query("SELECT p FROM MaintenancePayment p WHERE p.month = :month AND p.year = :year AND p.status = 'UNPAID'")
-    List<MaintenancePayment> findUnpaidByMonthAndYear(int month, int year);
+    // In MaintenancePaymentRepository.java
+    @Query("SELECT m FROM MaintenancePayment m WHERE m.month = :month AND m.year = :year AND m.status IN ('UNPAID', 'PARTIAL')")
+    List<MaintenancePayment> findUnpaidByMonthAndYear(@Param("month") int month, @Param("year") int year);
 }
