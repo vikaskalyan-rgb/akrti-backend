@@ -24,6 +24,37 @@ public class EmailService {
     @Value("${brevo.api.key:}")
     private String apiKey;
 
+
+    public void sendHtmlEmail(String toEmail, String subject, String html) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.info("📧 [SIMULATED HTML EMAIL] To: {} | Subject: {}", toEmail, subject);
+            return;
+        }
+        try {
+            RestTemplate restTemplate = new RestTemplate();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("api-key", apiKey);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("sender", Map.of(
+                    "name",  "Akriti Adeshwar Society",
+                    "email", "akritiadeshwar.society@gmail.com"
+            ));
+            body.put("to", List.of(Map.of("email", toEmail)));
+            body.put("subject", subject);
+            body.put("htmlContent", html);
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            restTemplate.postForEntity(
+                    "https://api.brevo.com/v3/smtp/email", request, String.class);
+            log.info("✅ HTML email sent to {}", toEmail);
+
+        } catch (Exception e) {
+            log.error("Failed to send HTML email to {}: {}", toEmail, e.getMessage());
+        }
+    }
+
     public void sendMaintenanceReminder(String toEmail, String flatNo,
                                         String name, String month,
                                         int amount) {
