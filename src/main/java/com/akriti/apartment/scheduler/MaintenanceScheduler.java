@@ -37,8 +37,8 @@ public class MaintenanceScheduler {
         }
     }
 
-    // Send reminders to defaulters on 10th of every month at 10 AM
-    @Scheduled(cron = "0 0 10 10 * *")
+    // Send reminders to defaulters on 12th of every month at 10 AM
+    @Scheduled(cron = "0 0 10 12 * *")
     public void sendDefaulterReminders() {
         LocalDate today = LocalDate.now();
         int month = today.getMonthValue();
