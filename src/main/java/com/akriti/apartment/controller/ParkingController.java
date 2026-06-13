@@ -44,23 +44,21 @@ public class ParkingController {
         return ResponseEntity.ok(slotToMap(saved, List.of()));
     }
 
-    /** PUT /api/parking/slots/{id} — admin updates slot (assign flat, move, capacity) */
+    /** PUT /api/parking/slots/{id} — admin assigns a flat (or unassigns) */
     @PutMapping("/slots/{id}")
     public ResponseEntity<?> updateSlot(@PathVariable Long id, @RequestBody ParkingSlot body) {
         return slotRepo.findById(id).map(slot -> {
-            if (body.getLabel() != null)        slot.setLabel(body.getLabel());
-            if (body.getPosX() != null)         slot.setPosX(body.getPosX());
-            if (body.getPosZ() != null)         slot.setPosZ(body.getPosZ());
-            if (body.getRotation() != null)     slot.setRotation(body.getRotation());
-            if (body.getCarCapacity() != null)  slot.setCarCapacity(body.getCarCapacity());
-            if (body.getBikeCapacity() != null) slot.setBikeCapacity(body.getBikeCapacity());
-            // assignedFlat: allow explicit null to unassign
-            slot.setAssignedFlat(body.getAssignedFlat());
+            if (body.getLabel() != null) slot.setLabel(body.getLabel());
+
+            // assignedFlat: allow explicit null/blank to unassign
+            String newFlat = body.getAssignedFlat();
+            boolean unassigning = (newFlat == null || newFlat.isBlank());
+            slot.setAssignedFlat(unassigning ? null : newFlat);
 
             ParkingSlot saved = slotRepo.save(slot);
 
-            // If slot got unassigned, clear its vehicles
-            if (body.getAssignedFlat() == null || body.getAssignedFlat().isBlank()) {
+            // clearing the flat clears the slot's vehicles
+            if (unassigning) {
                 vehicleRepo.deleteBySlotId(saved.getId());
             }
             return ResponseEntity.ok(slotToMap(saved, vehicleRepo.findBySlotId(saved.getId())));
@@ -78,66 +76,27 @@ public class ParkingController {
         return ResponseEntity.ok(r);
     }
 
-    /** POST /api/parking/slots/bulk — admin saves many slot positions at once */
-    @PostMapping("/slots/bulk")
-    public ResponseEntity<?> bulkUpdate(@RequestBody List<ParkingSlot> slots) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (ParkingSlot body : slots) {
-            if (body.getId() != null) {
-                slotRepo.findById(body.getId()).ifPresent(slot -> {
-                    slot.setPosX(body.getPosX());
-                    slot.setPosZ(body.getPosZ());
-                    slot.setRotation(body.getRotation());
-                    slotRepo.save(slot);
-                });
-            }
-        }
-        slotRepo.findAll().forEach(s ->
-                result.add(slotToMap(s, vehicleRepo.findBySlotId(s.getId()))));
-        return ResponseEntity.ok(result);
-    }
-
     // ════════════════════════════════════════════════════════
     //  VEHICLES
     // ════════════════════════════════════════════════════════
 
     /**
      * POST /api/parking/vehicles — add a vehicle to a slot.
-     * Enforces: slot must be assigned to the vehicle's flat,
-     * and capacity (cars/bikes) must not be exceeded.
+     * Rule: the slot must be assigned to the vehicle's flat.
+     * No capacity limit — a flat can add as many vehicles as they have.
      */
     @PostMapping("/vehicles")
     public ResponseEntity<?> addVehicle(@RequestBody Vehicle v) {
         ParkingSlot slot = slotRepo.findById(v.getSlotId()).orElse(null);
         if (slot == null) return ResponseEntity.badRequest().body(error("Slot not found"));
 
-        // Slot must belong to this flat
-        if (slot.getAssignedFlat() == null || !slot.getAssignedFlat().equalsIgnoreCase(v.getFlatNo())) {
+        if (slot.getAssignedFlat() == null ||
+                !slot.getAssignedFlat().equalsIgnoreCase(v.getFlatNo())) {
             return ResponseEntity.badRequest().body(error("This slot is not assigned to your flat"));
         }
 
-        // Capacity check
-        List<Vehicle> existing = vehicleRepo.findBySlotId(slot.getId());
-        String t = v.getType() == null ? "" : v.getType().toUpperCase();
-        boolean isBikeType = t.equals("BIKE") || t.equals("SCOOTER") || t.equals("CYCLE");
-        long cars  = existing.stream().filter(e -> {
-            String et = e.getType().toUpperCase();
-            return et.equals("CAR") || et.equals("TEMPO");
-        }).count();
-        long bikes = existing.stream().filter(e -> {
-            String et = e.getType().toUpperCase();
-            return et.equals("BIKE") || et.equals("SCOOTER") || et.equals("CYCLE");
-        }).count();
-
-        if (isBikeType && bikes >= slot.getBikeCapacity()) {
-            return ResponseEntity.badRequest().body(error("No bike space left in this slot"));
-        }
-        if (!isBikeType && cars >= slot.getCarCapacity()) {
-            return ResponseEntity.badRequest().body(error("No car space left in this slot"));
-        }
-
         v.setId(null);
-        v.setType(t);
+        v.setType(v.getType() == null ? "CAR" : v.getType().toUpperCase());
         Vehicle saved = vehicleRepo.save(v);
         return ResponseEntity.ok(saved);
     }
@@ -162,7 +121,6 @@ public class ParkingController {
     /**
      * DELETE /api/parking/vehicles/tenant/{flatNo}
      * Called when a tenant leaves — removes only tenant-added vehicles.
-     * (Wire this into your flat-management tenant-removal flow.)
      */
     @DeleteMapping("/vehicles/tenant/{flatNo}")
     public ResponseEntity<?> removeTenantVehicles(@PathVariable String flatNo) {
@@ -178,11 +136,6 @@ public class ParkingController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", s.getId());
         m.put("label", s.getLabel());
-        m.put("posX", s.getPosX());
-        m.put("posZ", s.getPosZ());
-        m.put("rotation", s.getRotation());
-        m.put("carCapacity", s.getCarCapacity());
-        m.put("bikeCapacity", s.getBikeCapacity());
         m.put("assignedFlat", s.getAssignedFlat());
         m.put("vehicles", vehicles);
         return m;
