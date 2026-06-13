@@ -100,4 +100,74 @@ public class DashboardController {
         }
         return ResponseEntity.ok(trend);
     }
+
+    @GetMapping("/activity-feed")
+public ResponseEntity<?> getActivityFeed() {
+    List<Map<String, Object>> feed = new ArrayList<>();
+ 
+    // Recent payments (last 5 paid)
+    maintenancePaymentRepository
+        .findTop5ByStatusOrderByUpdatedAtDesc(
+            com.akriti.apartment.entity.MaintenancePayment.Status.PAID
+        )
+        .forEach(p -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("type",      "payment");
+            item.put("text",      "Flat " + p.getFlatNo() + " paid ₹" + p.getPaidAmount());
+            item.put("sub",       "Maintenance · " + p.getPaidOn());
+            item.put("timestamp", p.getUpdatedAt() != null ? p.getUpdatedAt().toString() : "");
+            feed.add(item);
+        });
+ 
+    // Recent complaints (last 3 open)
+    complaintRepository
+        .findTop3ByStatusOrderByCreatedAtDesc(Complaint.Status.OPEN)
+        .forEach(c -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("type",      "complaint");
+            item.put("text",      c.getTitle());
+            item.put("sub",       "Complaint · Flat " + c.getFlatNo());
+            item.put("timestamp", c.getCreatedAt() != null ? c.getCreatedAt().toString() : "");
+            feed.add(item);
+        });
+ 
+    // Recent announcements (last 2)
+    announcementRepository
+        .findTop2ByOrderByPostedAtDesc()
+        .forEach(a -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("type",      "announcement");
+            item.put("text",      a.getTitle());
+            item.put("sub",       "Announcement");
+            item.put("timestamp", a.getPostedAt() != null ? a.getPostedAt().toString() : "");
+            feed.add(item);
+        });
+ 
+    // Recent deliveries (pending)
+    deliveryRepository
+        .findTop3ByStatusOrderByArrivedAtDesc(
+            com.akriti.apartment.entity.Delivery.Status.PENDING
+        )
+        .forEach(d -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("type",      "delivery");
+            item.put("text",      "Parcel for Flat " + d.getFlatNo());
+            item.put("sub",       "Delivery · " + d.getDeliveryCompany());
+            item.put("timestamp", d.getArrivedAt() != null ? d.getArrivedAt().toString() : "");
+            feed.add(item);
+        });
+ 
+    // Sort by timestamp descending, return top 8
+    feed.sort((a, b) -> {
+        String ta = (String) a.getOrDefault("timestamp", "");
+        String tb = (String) b.getOrDefault("timestamp", "");
+        return tb.compareTo(ta);
+    });
+ 
+    return ResponseEntity.ok(feed.stream().limit(8).collect(java.util.stream.Collectors.toList()));
+}
+
+
+
+    
 }
